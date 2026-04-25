@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 
 from backend.models.data_manager import get_trainee, update_trainee
-
+from backend.models.data_manager import plan_level_and_index
 
 class ProfileScreen(QWidget):
     """User profile and settings screen"""
@@ -141,6 +141,7 @@ class ProfileScreen(QWidget):
         
         content_layout.addLayout(header_row)
 
+        # Main Layout Grid
         grid = QGridLayout()
         grid.setSpacing(30)
 
@@ -183,6 +184,7 @@ class ProfileScreen(QWidget):
         id_layout.addWidget(self.name_label)
         id_layout.addWidget(self.name_input)
 
+        # Email
         self.email_label = QLabel("user@example.com")
         self.email_label.setStyleSheet("color: white; background: transparent; font-size: 15px; font-weight: bold;")
         self.email_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -190,6 +192,7 @@ class ProfileScreen(QWidget):
 
         id_layout.addSpacing(20)
         
+        # Details List (DOB, Gender)
         details_box = QFrame()
         details_box.setStyleSheet("background: rgba(0,0,0,0.15); border-radius: 16px; border: none;")
         details_layout = QGridLayout(details_box)
@@ -325,6 +328,7 @@ class ProfileScreen(QWidget):
 
     def toggle_edit(self):
         if not self.edit_mode:
+            # Enter Edit Mode - Only for Personal Details
             self.edit_mode = True
             self.edit_btn.setText("Save Changes")
             
@@ -355,8 +359,9 @@ class ProfileScreen(QWidget):
             self.save_data()
 
     def save_data(self):
-        """Save changes to DB and exit edit mode"""
+        """Save changes to DB and exit edit mode - Personal Details Only"""
         try:
+            # Only update personal details, not fitness profile
             updates = {
                 "name": self.name_input.text().strip(),
                 "dob": self.dob_input.text().strip(),
@@ -392,6 +397,10 @@ class ProfileScreen(QWidget):
         self.f_box.value_label.setText(f"{self.profile.get('weekly_frequency', 0)} days")
         
         self.plan_val.setText(self.profile.get("fitness_level") or "Standard Plan")
+
+        plan_id = self.profile.get("plan_id", 1)
+        main_level, _ = plan_level_and_index(plan_id)
+        self.plan_val.setText(main_level) 
 
         # Ensure inputs are hidden and labels visible
         self.name_label.setVisible(True); self.name_input.setVisible(False)

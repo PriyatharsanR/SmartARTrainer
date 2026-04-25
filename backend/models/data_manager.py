@@ -10,7 +10,10 @@ import base64
 import hashlib
 import hmac
 
+# =====================================================
 # PASSWORD HASHING (PBKDF2-SHA256)
+# Store format: pbkdf2_sha256$<iterations>$<salt_b64>$<hash_b64>
+# =====================================================
 
 _PBKDF2_ITERATIONS = 200_000
 
@@ -60,7 +63,9 @@ def verify_password(plain_password: str, stored_value: str) -> bool:
         return False
 
 
+# =====================================================
 # REGISTRATION & LOGIN
+# =====================================================
 
 def determine_plan_id(fitness_data):
     if not fitness_data or not fitness_data.get('workout_experience'):
@@ -82,19 +87,36 @@ def register_user(name, email, password, fitness_data=None):
     if not connection:
         return False, "Database connection failed", None
 
+    cursor = None
     try:
         cursor = connection.cursor()
         password_hash = hash_password(password)
 
         if fitness_data:
-            plan_id = determine_plan_id(fitness_data)
+            # Use ML model 
+            try:
+                from backend.ml.workout_plan_predictor import predict_plan
+                plan_id, plan_label = predict_plan(fitness_data)  # plan_id 1..15, label "Beginner 3"
+            except Exception as e:
+                print("Model prediction failed, fallback to rule-based:", e)
+
+                # Fallback to your old logic (1/2/3)
+                plan_id = determine_plan_id(fitness_data)
+                if plan_id == 1:
+                    plan_label = "Beginner 1"
+                elif plan_id == 2:
+                    plan_label = "Intermediate 1"
+                else:
+                    plan_label = "Advanced 1"
 
             query = """
                 INSERT INTO trainee (
                     name, email, pwd, dob, gender, height, weight,
-                    workout_experience, workout_duration, weekly_frequency, plan_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    workout_experience, workout_duration, weekly_frequency,
+                    fitness_level, plan_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
+
             params = (
                 name, email, password_hash,
                 fitness_data.get('dob'),
@@ -104,11 +126,17 @@ def register_user(name, email, password, fitness_data=None):
                 fitness_data.get('workout_experience'),
                 fitness_data.get('workout_duration'),
                 fitness_data.get('weekly_frequency'),
-                plan_id
+                plan_label,   
+                plan_id       
             )
+
         else:
-            query = "INSERT INTO trainee (name, email, pwd, plan_id) VALUES (?, ?, ?, ?)"
-            params = (name, email, password_hash, 1)
+            # If no fitness data, default to Beginner 1
+            query = """
+                INSERT INTO trainee (name, email, pwd, fitness_level, plan_id)
+                VALUES (?, ?, ?, ?, ?)
+            """
+            params = (name, email, password_hash, "Beginner 1", 1)
 
         cursor.execute(query, params)
         connection.commit()
@@ -166,7 +194,7 @@ def get_workout_by_id(workout_id):
     try:
         cursor = connection.cursor()
         cursor.execute("""
-            SELECT workout_name, video_url, description
+            SELECT workout_name, description
             FROM workout
             WHERE workout_id = ?
         """, (workout_id,))
@@ -191,7 +219,9 @@ def get_all_workouts():
     finally:
         close_connection(connection, cursor)
 
+# =====================================================
 # Workout & WORKOUT PLAN
+# =====================================================
 
 WORKOUT_COLUMNS = [
     "jumpingjack_crt",
@@ -211,7 +241,7 @@ def get_trainee_info(trainee_id):
     try:
         cursor = connection.cursor()
         cursor.execute("""
-            SELECT trainee_id, name, plan_id, fitness_level
+            SELECT trainee_id, name, gender, plan_id, fitness_level
             FROM trainee
             WHERE trainee_id = ?
         """, (trainee_id,))
@@ -248,7 +278,9 @@ def get_workout_plan(plan_id):
         close_connection(connection, cursor)
 
 
+# =====================================================
 # WORKOUT SESSION
+# =====================================================
 
 def save_workout_session(trainee_id, session_data):
     connection = get_db_connection()
@@ -289,7 +321,9 @@ def get_latest_session_status(trainee_id):
     finally:
         close_connection(connection, cursor)
 
+# =====================================================
 # PROFILE
+# =====================================================
 
 def get_trainee(trainee_id):
     connection = get_db_connection()
@@ -325,7 +359,9 @@ def update_trainee(trainee_id, **kwargs):
     finally:
         close_connection(connection, cursor)
         
-# ANALYTICS
+# =====================================================
+# ANALYTICS (GLOBAL SHARED INSTANCE)
+# =====================================================
 
 class WorkoutSessionStats:
     def __init__(self, exercise_name, reps_completed, correct_reps, wrong_reps, duration):
@@ -392,9 +428,11 @@ class SessionAnalytics:
             close_connection(connection, cursor)
 
 
-# Global analytics instance used by the UI to aggregate session stats
+# ✅ THIS LINE FIXES YOUR ERROR
 session_analytics = SessionAnalytics()
-# FORGOT PASSWORD
+# =====================================================
+# FORGOT PASSWORD (USED BY LoginScreen UI)
+# =====================================================
 
 def check_email_exists(email: str) -> bool:
     """Return True if the email exists in trainee table."""
@@ -489,12 +527,15 @@ def promote_trainee_plan(trainee_id, new_plan_id):
         close_connection(connection, cursor)
         
 
+# =====================================================
 # RESET AFTER PROMOTION
+# =====================================================
 
 def reset_sessions_after_promotion(trainee_id):
     trainee = get_trainee_info(trainee_id)
 
-    # 15-plan rule: Advanced plans are 11..15; do not reset for Advanced
+    # ✅ 15-plan rule:
+    # Advanced plans are 11..15, so do NOT reset in Advanced
     if trainee:
         plan_id = trainee.get("plan_id", 1)
         if plan_id >= 11:
@@ -548,7 +589,9 @@ def update_fitness_level(trainee_id, plan_id):
 
 
 
-# PLAN ID HELPERS
+# =======================
+# PLAN ID HELPERS (15 plans)
+# =======================
 BEGINNER_START = 1        # 1..5
 INTERMEDIATE_START = 6    # 6..10
 ADVANCED_START = 11       # 11..15
@@ -601,7 +644,7 @@ def get_next_plan_same_index(plan_id: int) -> int:
 def reset_sessions_after_inactivity(trainee_id):
     """
     Reset sessions for inactivity (30+ days).
-    This reset applies to all levels, including Advanced (plan_id 11-15).
+    ✅ This MUST reset even Advanced (plan_id 11–15).
     """
     connection = get_db_connection()
     if not connection:

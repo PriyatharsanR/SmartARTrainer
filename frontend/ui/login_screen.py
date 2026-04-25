@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QRect, QTimer
 from PyQt6.QtGui import QFont, QColor, QPalette, QPainter, QPainterPath, QLinearGradient
 
 import re
+from frontend.utils.validation import is_strong_password
 from backend.utils.email_service import generate_otp, send_otp, OTPInputDialog
 from backend.models.data_manager import (
     check_email_exists, 
@@ -149,18 +150,19 @@ class ForgotPasswordDialog(QMessageBox):
             return
             
         while True:
-            # Step 4: New Password
+            # Step 4: New Password with strong validation
             new_password, ok = QInputDialog.getText(
                 self.parent(), "New Password",
-                "Enter your new password (min 6 characters):",
+                "Enter your new password (min 8 characters, 1 capital, 1 small, 1 number):",
                 QLineEdit.EchoMode.Password
             )
             
             if not ok:
                 return
                 
-            if len(new_password) < 6:
-                QMessageBox.warning(self.parent(), "Validation Error", "Password must be at least 6 characters.")
+            is_strong, s_msg = is_strong_password(new_password)
+            if not is_strong:
+                QMessageBox.warning(self.parent(), "Validation Error", s_msg)
                 continue
 
             # Check if new password is same as old one
@@ -213,16 +215,20 @@ class LoginScreen(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
+        # Add diagonal split background
         self.diagonal_bg = DiagonalSplitWidget(self)
         self.diagonal_bg.setGeometry(0, 0, self.width(), self.height())
         self.diagonal_bg.lower()
         
+        # Content layout
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
         
+        # Left side - Branding (on white background)
         self.create_branding_section(content_layout)
         
+        # Right side - Login/Register forms (on gradient)
         self.create_auth_section(content_layout)
         
         main_layout.addLayout(content_layout)
@@ -283,12 +289,15 @@ class LoginScreen(QWidget):
         auth_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         auth_layout.setContentsMargins(60, 40, 60, 40)
         
+        # Stacked widget for login/register forms
         self.form_stack = QStackedWidget()
         self.form_stack.setStyleSheet("background: transparent;")
         
+        # Login form
         login_widget = self.create_login_form()
         self.form_stack.addWidget(login_widget)
         
+        # Register form
         register_widget = self.create_register_form()
         self.form_stack.addWidget(register_widget)
         
@@ -305,24 +314,28 @@ class LoginScreen(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setContentsMargins(40, 40, 40, 40)
         
+        # Title
         title = QLabel("Welcome Back")
         title.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
         title.setStyleSheet("color: white; background: transparent;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
+        # Subtitle
         subtitle = QLabel("Login to your account")
         subtitle.setFont(QFont("Segoe UI", 14))
         subtitle.setStyleSheet("color: rgba(255, 255, 255, 0.9); margin-bottom: 20px; background: transparent;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
         
+        # Email field
         self.login_email = QLineEdit()
         self.login_email.setPlaceholderText("Registered email")
         self.login_email.setMinimumHeight(45)
         self.login_email.setStyleSheet(self.get_input_style())
         layout.addWidget(self.login_email)
         
+        # Password field
         self.login_password = QLineEdit()
         self.login_password.setPlaceholderText("Enter your password")
         self.login_password.setEchoMode(QLineEdit.EchoMode.Password)
@@ -400,12 +413,14 @@ class LoginScreen(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setContentsMargins(40, 20, 40, 20)
         
+        # Title
         title = QLabel("Create Account")
         title.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
         title.setStyleSheet("color: white; background: transparent;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
+        # Subtitle
         subtitle = QLabel("Start your fitness journey")
         subtitle.setFont(QFont("Segoe UI", 14))
         subtitle.setStyleSheet("color: rgba(255, 255, 255, 0.9); margin-bottom: 15px; background: transparent;")
@@ -419,6 +434,7 @@ class LoginScreen(QWidget):
         self.register_username.textChanged.connect(self.check_register_fields)
         layout.addWidget(self.register_username)
         
+        # Email field
         self.register_email = QLineEdit()
         self.register_email.setPlaceholderText("Email")
         self.register_email.setMinimumHeight(45)
@@ -426,6 +442,7 @@ class LoginScreen(QWidget):
         self.register_email.textChanged.connect(self.check_register_fields)
         layout.addWidget(self.register_email)
         
+        # Password field
         self.register_password = QLineEdit()
         self.register_password.setPlaceholderText("Password")
         self.register_password.setEchoMode(QLineEdit.EchoMode.Password)
@@ -435,12 +452,14 @@ class LoginScreen(QWidget):
         self.register_password.textChanged.connect(self.validate_password)
         layout.addWidget(self.register_password)
         
+        # Password hint label
         self.password_hint = QLabel("Minimum 8 characters (1 uppercase, 1 lowercase, 1 number)")
         self.password_hint.setStyleSheet("color: white; font-size: 11px; margin-left: 20px; font-weight: bold;")
         self.password_hint.setWordWrap(True)
         self.password_hint.setVisible(False)
         layout.addWidget(self.password_hint)
         
+        # Confirm password field
         self.register_confirm = QLineEdit()
         self.register_confirm.setPlaceholderText("Confirm Password")
         self.register_confirm.setEchoMode(QLineEdit.EchoMode.Password)
@@ -450,12 +469,14 @@ class LoginScreen(QWidget):
         self.register_confirm.textChanged.connect(self.validate_password)
         layout.addWidget(self.register_confirm)
         
+        # Confirm password hint label
         self.confirm_hint = QLabel("Passwords must match")
         self.confirm_hint.setStyleSheet("color: white; font-size: 11px; margin-left: 20px; font-weight: bold;")
         self.confirm_hint.setWordWrap(True)
         self.confirm_hint.setVisible(False)
         layout.addWidget(self.confirm_hint)
         
+        # Register button
         self.register_btn = QPushButton("SIGN UP")
         self.register_btn.setMinimumHeight(45)
         self.register_btn.setCursor(Qt.CursorShape(13))
@@ -601,19 +622,13 @@ class LoginScreen(QWidget):
         password = self.register_password.text()
         confirm = self.register_confirm.text()
         
-        # Validation for primary password
         if not password:
             self.register_password.setStyleSheet(self.get_input_style())
             self.password_hint.setVisible(False)
             primary_ok = False
         else:
             self.password_hint.setVisible(True)
-            has_upper = any(c.isupper() for c in password)
-            has_lower = any(c.islower() for c in password)
-            has_digit = any(c.isdigit() for c in password)
-            has_length = len(password) >= 8
-            
-            primary_ok = has_upper and has_lower and has_digit and has_length
+            primary_ok, message = is_strong_password(password)
 
             if primary_ok:
                 self.register_password.setStyleSheet(self.get_input_style(border_color="#4CAF50")) # Green
@@ -621,7 +636,8 @@ class LoginScreen(QWidget):
                 self.password_hint.setStyleSheet("color: white; font-size: 11px; margin-left: 20px; font-weight: bold;")
             else:
                 self.register_password.setStyleSheet(self.get_input_style(border_color="#f44336")) # Red
-                self.password_hint.setText("Unstrong: Needs 8+ chars (1 Up, 1 Low, 1 Num)")
+                # If not strong, use the specific message from validation utility
+                self.password_hint.setText(f"Unstrong: {message}")
                 self.password_hint.setStyleSheet("color: white; font-size: 11px; margin-left: 20px; font-weight: bold;")
 
         # Validation for confirmation matching

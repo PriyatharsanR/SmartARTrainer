@@ -13,6 +13,24 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
 
+class _NoWheelMixin:
+    """Mixin to disable mouse-wheel changing values (lets parent scroll instead)."""
+    def wheelEvent(self, event):  # noqa: N802 (Qt naming)
+        event.ignore()
+
+
+class NoWheelSpinBox(_NoWheelMixin, QSpinBox):
+    pass
+
+
+class NoWheelDoubleSpinBox(_NoWheelMixin, QDoubleSpinBox):
+    pass
+
+
+class NoWheelComboBox(_NoWheelMixin, QComboBox):
+    pass
+
+
 class FitnessForm(QWidget):
     """Comprehensive fitness details form"""
 
@@ -37,7 +55,30 @@ class FitnessForm(QWidget):
     def show_error(self, title: str, message: str):
         QMessageBox.warning(self, title, message)
 
+    # ======================================================
+    #  ✅ NEW: Ask consent before storing fitness details
+    # ======================================================
+    def ask_storage_consent(self) -> bool:
+        """
+        Ask user consent to store fitness details before saving to DB.
+        Returns True only if user agrees.
+        """
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Consent Required")
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setText("Do you agree to store your fitness details in the database?")
+        msg.setInformativeText(
+            "We store these details to personalize your workout plan and track your progress.\n"
+            "If you do not agree, we cannot save your fitness details."
+        )
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        return msg.exec() == QMessageBox.StandardButton.Yes
+
     def init_ui(self):
+        # ================= Scroll Area =================
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -62,6 +103,7 @@ class FitnessForm(QWidget):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 80, 0, 40)
 
+        # ================= Card =================
         card = QWidget()
         card.setFixedWidth(650)
         card.setStyleSheet("""
@@ -76,6 +118,7 @@ class FitnessForm(QWidget):
         card_layout.setSpacing(25)
         card_layout.setContentsMargins(40, 50, 40, 50)
 
+        # ================= Title =================
         title = QLabel("Complete Your Fitness Profile")
         title.setFont(QFont("Segoe UI", 36, QFont.Weight.ExtraBold))
         title.setStyleSheet("""
@@ -96,6 +139,7 @@ class FitnessForm(QWidget):
         card_layout.addWidget(title)
         card_layout.addWidget(subtitle)
 
+        # ================= Styles =================
         label_style = "color:#2d3748; font-size:15px; font-weight:800; background:transparent;"
 
         radio_style = """
@@ -169,6 +213,7 @@ class FitnessForm(QWidget):
             }
         """
 
+        # ================= Helper =================
         def create_row(text, widget):
             container = QWidget()
             container.setFixedWidth(550)
@@ -249,6 +294,7 @@ class FitnessForm(QWidget):
             btn_down.clicked.connect(dec)
             btn_up.clicked.connect(inc)
 
+            # Button container for side-by-side layout
             btn_layout = QHBoxLayout()
             btn_layout.setSpacing(5)
             btn_layout.addWidget(btn_down)
@@ -259,10 +305,11 @@ class FitnessForm(QWidget):
             row.addWidget(widget)
             row.addLayout(btn_layout)
             return container
-        
-        self.day_input = QComboBox()
-        self.month_input = QComboBox()
-        self.year_input = QComboBox()
+
+        # ================= DOB (force user selection) =================
+        self.day_input = NoWheelComboBox()
+        self.month_input = NoWheelComboBox()
+        self.year_input = NoWheelComboBox()
 
         self.day_input.addItem("DD")
         for d in range(1, 32):
@@ -309,6 +356,7 @@ class FitnessForm(QWidget):
         dob_layout.addWidget(self.year_input)
         card_layout.addWidget(dob_container)
 
+        # ================= Gender (no default selection) =================
         gender_label = QLabel("Gender")
         gender_label.setStyleSheet(label_style)
         gender_label.setMinimumWidth(200)
@@ -332,20 +380,22 @@ class FitnessForm(QWidget):
         gender_layout.addWidget(self.female_radio)
         card_layout.addWidget(gender_box)
 
-        self.height_input = QDoubleSpinBox()
+        # ================= Height & Weight (require user interaction) =================
+        self.height_input = NoWheelDoubleSpinBox()
         self.height_input.setRange(100, 200)
         self.height_input.setSuffix(" cm")
         self.height_input.setValue(100)  # placeholder-like default
         self.height_input.valueChanged.connect(lambda _: setattr(self, "_height_touched", True))
         card_layout.addWidget(create_spinner_row("Height", self.height_input))
 
-        self.weight_input = QDoubleSpinBox()
+        self.weight_input = NoWheelDoubleSpinBox()
         self.weight_input.setRange(30, 150)
         self.weight_input.setSuffix(" kg")
         self.weight_input.setValue(30)  # placeholder-like default
         self.weight_input.valueChanged.connect(lambda _: setattr(self, "_weight_touched", True))
         card_layout.addWidget(create_spinner_row("Weight", self.weight_input))
 
+        # ================= Workout Experience (no default selection) =================
         exp_label = QLabel("Do you have previous workout experience?")
         exp_label.setStyleSheet(label_style)
         exp_label.setMinimumWidth(200)
@@ -369,16 +419,17 @@ class FitnessForm(QWidget):
         exp_layout.addWidget(self.workout_no_radio)
         card_layout.addWidget(exp_box)
 
+        # ================= Experience Details =================
         self.exp_details_widget = QWidget()
         exp_details_layout = QVBoxLayout(self.exp_details_widget)
 
-        self.duration_input = QDoubleSpinBox()
+        self.duration_input = NoWheelDoubleSpinBox()
         self.duration_input.setRange(0, 600)
         self.duration_input.setSuffix(" mins")
         self.duration_input.setValue(0)
         self.duration_input.valueChanged.connect(lambda _: setattr(self, "_duration_touched", True))
 
-        self.freq_input = QSpinBox()
+        self.freq_input = NoWheelSpinBox()
         self.freq_input.setRange(0, 7)     # allow 0 as default (means "not selected")
         self.freq_input.setSuffix(" days")
         self.freq_input.setValue(0)        # default 0
@@ -401,6 +452,7 @@ class FitnessForm(QWidget):
         self.workout_yes_radio.toggled.connect(on_experience_yes_toggled)
         card_layout.addWidget(self.exp_details_widget)
 
+        # ================= Actions =================
         actions_layout = QHBoxLayout()
 
         back_btn = QPushButton("Back")
@@ -444,6 +496,7 @@ class FitnessForm(QWidget):
         actions_layout.addWidget(submit_btn, 2)
         card_layout.addLayout(actions_layout)
 
+        # ================= Final Layout =================
         center = QHBoxLayout()
         center.addStretch()
         center.addWidget(card)
@@ -543,6 +596,18 @@ class FitnessForm(QWidget):
             "workout_duration": duration,
             "weekly_frequency": frequency
         }
+
+        # ======================================================
+        # ✅ CONSENT CHECK (ONLY CHANGE IN SUBMIT FLOW)
+        # ======================================================
+        if not self.ask_storage_consent():
+            QMessageBox.warning(
+                self,
+                "Consent required",
+                "You must agree to store your fitness details before we can save them.\n"
+                "Please click 'Sign Up' again and choose 'Yes' to continue."
+            )
+            return
 
         self.formCompleted.emit(fitness_data)
 
